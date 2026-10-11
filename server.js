@@ -164,7 +164,66 @@ app.post('/api/chat', async (req, res) => {
     res.status(500).json({ error: 'Internal server error generating AI reply.' });
   }
 });
+// OpenAI API proxy for USMAN AI 2.0
+app.post(['/api/openai', '/api/openai/'], async (req, res) => {
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
 
+    if (!apiKey) {
+      return res.status(500).json({
+        error: 'OPENAI_API_KEY is not configured on the backend server.'
+      });
+    }
+
+    const { messages, prompt } = req.body || {};
+
+    let chatMessages = Array.isArray(messages) ? messages : [];
+
+    if (chatMessages.length === 0 && typeof prompt === 'string' && prompt.trim()) {
+      chatMessages = [{ role: 'user', content: prompt.trim() }];
+    }
+
+    if (chatMessages.length === 0) {
+      return res.status(400).json({
+        error: 'Provide a messages array or a non-empty prompt.'
+      });
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: chatMessages
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('[OpenAI API Error]:', response.status, data);
+      return res.status(response.status).json({
+        error: data.error?.message || 'OpenAI API request failed.'
+      });
+    }
+
+    const replyText = data.choices?.[0]?.message?.content || '';
+
+    return res.json({
+      text: replyText,
+      reply: replyText,
+      message: replyText
+    });
+  } catch (error) {
+    console.error('[OpenAI Handler Exception]:', error.message);
+    return res.status(500).json({
+      error: 'Internal server error generating OpenAI reply.'
+    });
+  }
+});
 app.listen(PORT, () => {
   console.log(`USMAN AI 2.0 Backend running on port ${PORT}`);
 });
